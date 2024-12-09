@@ -26,7 +26,7 @@ def send_command(elevation_velocity, azimuth_velocity, should_shoot):
     serial_conn.write(command.encode())
     print(f"Sent command: {command.strip()}")
 
-def sentry_pid(avg_position):
+def sentry_pid(avg_position, faceDetected):
     if not hasattr(sentry_pid, "targetCenteredCounter"):
         sentry_pid.targetCenteredCounter = 0  # Initialize static variable    targetPosX, targetPosY = avg_position
 
@@ -38,7 +38,7 @@ def sentry_pid(avg_position):
     else:
         sentry_pid.targetCenteredCounter = 0
 
-    if sentry_pid.targetCenteredCounter > targetCenteredCountToShoot :
+    if (sentry_pid.targetCenteredCounter > targetCenteredCountToShoot) and (faceDetected) :
         shouldShoot = 1
     else:
         shouldShoot = 0
@@ -132,6 +132,7 @@ if not ret:
 
 # Create a mask image with the same shape as the frame
 mask = np.zeros_like(frame)
+faceDetected = False
 
 while True:
     # Capture frame-by-frame
@@ -147,11 +148,13 @@ while True:
 
     # Perform face detection at the specified interval
     current_time = time.time()
+
     if (current_time - last_detection_time) >= interval:
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
         last_detection_time = current_time
 
         if len(faces) > 0:
+            faceDetected = True
             # Get the bounding box of the first detected face
             x, y, w, h = faces[0]
 
@@ -203,6 +206,9 @@ while True:
                 if len(p0) == 0:
                     p0 = None
                     weights = []
+        else:
+            faceDetected = False
+
 
     # Only proceed with optical flow if there are points to track
     if p0 is not None and len(p0) > 0:
@@ -240,7 +246,7 @@ while True:
         avg_position_normalized = calculate_and_mark_average_position(p0, weights, img)
         if avg_position_normalized:
             print(f"Average position: {avg_position_normalized}")
-            sentry_pid(avg_position_normalized)
+            sentry_pid(avg_position_normalized, faceDetected)
 
 
     # Display the result
