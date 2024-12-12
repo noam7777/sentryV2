@@ -1,52 +1,7 @@
 import cv2
 import numpy as np
 import time
-import serial
-
-kP_azimuth = 80
-kP_elevation = 120
-
-# Configure the serial connection
-arduino_port = '/dev/ttyUSB0'  # Replace with the correct port for your Arduino
-baud_rate = 9600
-serial_conn = serial.Serial(arduino_port, baud_rate)
-time.sleep(2)  # Allow the connection to initialize
-
-targetErrorToShoot = 0.1
-targetCenteredCountToShoot = 5
-
-def send_command(elevation_velocity, azimuth_velocity, should_shoot):
-    """
-    Sends a structured command to the Arduino.
-    :param elevation_velocity: Elevation angular velocity in DecidegreesPerSec (integer).
-    :param azimuth_velocity: Azimuth angular velocity in DecidegreesPerSec (integer).
-    :param should_shoot: 1 to shoot, 0 otherwise (integer).
-    """
-    command = f"{elevation_velocity},{azimuth_velocity},{should_shoot}\n"
-    serial_conn.write(command.encode())
-    print(f"Sent command: {command.strip()}")
-
-def sentry_pid(avg_position, faceDetected):
-    if not hasattr(sentry_pid, "targetCenteredCounter"):
-        sentry_pid.targetCenteredCounter = 0  # Initialize static variable    targetPosX, targetPosY = avg_position
-
-    targetPosX, targetPosY = avg_position
-    errorX = -(targetPosX - 0.5)
-    errorY = (targetPosY - 0.5)
-    if (((errorX ** 2 + errorY ** 2) ** 0.5) < targetErrorToShoot):
-        sentry_pid.targetCenteredCounter += 1
-    else:
-        sentry_pid.targetCenteredCounter = 0
-
-    if (sentry_pid.targetCenteredCounter > targetCenteredCountToShoot) and (faceDetected) :
-        shouldShoot = 1
-    else:
-        shouldShoot = 0
-
-    cmdAzimuth = int(errorX * kP_azimuth)
-    cmdElevation = int(errorY * kP_elevation)
-    send_command(cmdElevation, cmdAzimuth, shouldShoot)  # Move servos at 15°/sec and initiate shooting
-
+from SentryController import Controller
 
 
 def calculate_and_mark_average_position(features, weights, image):
@@ -133,6 +88,9 @@ if not ret:
 # Create a mask image with the same shape as the frame
 mask = np.zeros_like(frame)
 faceDetected = False
+
+sentryController = Controller()
+
 
 while True:
     # Capture frame-by-frame
@@ -246,7 +204,7 @@ while True:
         avg_position_normalized = calculate_and_mark_average_position(p0, weights, img)
         if avg_position_normalized:
             print(f"Average position: {avg_position_normalized}")
-            sentry_pid(avg_position_normalized, faceDetected)
+            sentryController.sentry_pid(avg_position_normalized, faceDetected)
 
 
     # Display the result
