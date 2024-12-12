@@ -1,0 +1,36 @@
+
+
+modes to implement on arduino:
+arduino - shut down mode when communication lost with the computer
+set the shoot command for gun command:
+0 - disarm - pwm0 and dont allow trigger movement
+1 - arm/holdfire - the current nominal state, send idle pwm, if motors not armend, initiate arm sequence and then move to hold fire
+2 - fire - regular shot command
+3 - shutdown - centrelize, disarm
+4 - reloaded - set fire shot count to zero
+
+
+shutdown - centrelize, disarm, and stop servos
+reload - set 
+
+
+
+modes to implement in python:
+sentry modes:
+1- manual mode:
+    move with keys
+    shoot when pressed j
+
+
+
+terminatorMode: add scan and look for enemies. lock on them and shoot when able.
+
+
+
+
+
+mlOps:
+set a button to record a person video when finish save the video in a folder of enemy/ally for a network to train on.
+use advanced network to train a small network that all people in the video are enemies or allies.
+
+

@@ -1,9 +1,30 @@
 #include <Servo.h> // Include the Servo library
 
+enum shotStates_e {
+  SHOT_STATE_IDLE,
+  SHOT_STATE_SPIN_FLYWHEEL,
+  SHOT_STATE_TRIGGER_FARWARD
+};
+
+shotStates_e shotStates = SHOT_STATE_IDLE;
+
+
+enum gunStates_e {
+  GUN_STATE_SHUTDOWN = 0,   // pwm 0 to the gun and centrelize.                         set shot state to idle if not in idle
+  GUN_STATE_DISARM = 1,     // pwm 0 to the gun and follow elevation azimuth commands.  set shot state to idle if not in idle
+  GUN_STATE_ARM = 2,        // hold fire, arm esc if need to.                           set shot state to idle if not in idle
+  GUN_STATE_FIRE = 3,       // regular shoot command
+  GUN_STATE_RELOADED = 4    // not a mode, this just update the shotFiredCounter to 0.        set shot state to idle if not in idle
+};
+
+gunStates_e gunState = GUN_STATE_SHUTDOWN;
+gunStates_e gunStatePrev = GUN_STATE_SHUTDOWN;
+
+
 // general parameters
 int maxTargetLossTime = 1000;
 int shotFiredCounter = 0;
-int maxShotsInMagazin = 8;
+int maxShotsInMagazin = 3;
 
 // shot mechanism parameters:
 int durationForMotorsToSpeedUpMs = 1000;
@@ -14,6 +35,10 @@ int flywhillIdlePwm = 990;
 int flywhillSpinPwm = 1150;
 
 int pidLoopDelayMs = 50;
+
+uint32_t shotStateMachineEnterStateTimeStamp;
+
+
 
 // Define a ServoController class
 class ServoController {
@@ -88,28 +113,28 @@ Servo triggerServo;
 Servo esc; // Create a Servo object to control the ESC
 
 void armEscs(void) {
-  // Initialize ESC at minimum throttle
-  esc.writeMicroseconds(0);
-  Serial.println("esc.writeMicroseconds(0)");
+  if ((gunState == GUN_STATE_SHUTDOWN) || (gunState == GUN_STATE_DISARM)) {
+    // Initialize ESC at minimum throttle
+    esc.writeMicroseconds(0);
+    Serial.println("esc.writeMicroseconds(0)");
 
-  delay(2000); // Wait for a short period
-  
-  // Initialize ESC at minimum throttle
-  esc.writeMicroseconds(flywhillIdlePwm);
-  Serial.println("esc.writeMicroseconds(flywhillIdlePwm)");
-  delay(5000); // Wait for a short period
-  Serial.println("esc is armed");
+    delay(2000); // Wait for a short period
+    
+    // Initialize ESC at minimum throttle
+    esc.writeMicroseconds(flywhillIdlePwm);
+    Serial.println("esc.writeMicroseconds(flywhillIdlePwm)");
+    delay(5000); // Wait for a short period
+    Serial.println("esc is armed");
+  }
 }
 
-uint32_t shotStateMachineEnterStateTimeStamp;
+void disarmEscs(void) {
+  esc.writeMicroseconds(0);
+  if((gunStatePrev != GUN_STATE_SHUTDOWN) || (gunState != GUN_STATE_DISARM)) {
+    Serial.println("esc is disarmed");
+  }
+}
 
-enum shotStates_e {
-  SHOT_STATE_IDLE,
-  SHOT_STATE_SPIN_FLYWHEEL,
-  SHOT_STATE_TRIGGER_FARWARD
-};
-
-shotStates_e shotStates = SHOT_STATE_IDLE;
 
 void setShotStateToSpinFlywheel(void) {
   esc.write(flywhillSpinPwm);
@@ -141,6 +166,10 @@ void shootNow(void) {
 }
 
 void handleShot(void) {
+  if (gunState == GUN_STATE_DISARM || gunState == GUN_STATE_DISARM){
+    setShotStateToIdle();
+    return;
+  }
 
   switch(shotStates){
     case SHOT_STATE_IDLE:
@@ -159,35 +188,28 @@ void handleShot(void) {
       }
       break;
   }
+
+
+}
+
+static void setGunStateToShutdown(void) {
+    disarmEscs();
+    elevationServo.centrelize();
+    azimuthServo.centrelize();
+    gunState = GUN_STATE_SHUTDOWN;
 }
 
 void setup() {
   Serial.begin(9600); // For debugging
-  pinMode(LED_BUILTIN, OUTPUT);
   elevationServo.attach();
   azimuthServo.attach();
   triggerServo.attach(6);
   esc.attach(9);
-
   shotFiredCounter = 0;
-  elevationServo.centrelize();
-  azimuthServo.centrelize();
-  armEscs();
-  setShotStateToIdle();
+  setGunStateToShutdown();
 }
 
 void loop() {
-  if (shotFiredCounter > maxShotsInMagazin) {
-    elevationServo.centrelize();
-    azimuthServo.centrelize();
-    setShotStateToIdle();
-    digitalWrite(LED_BUILTIN, HIGH);  // turn the LED on (HIGH is the voltage level)
-    delay(500);                      // wait for a second
-    digitalWrite(LED_BUILTIN, LOW);   // turn the LED off by making the voltage LOW
-    delay(500);
-    return;
-  }
-
   // Check if data is available on the serial port
   static int32_t lastRecivedCommandTimestamp = 0;
   if (Serial.available() > 0) {
@@ -202,31 +224,62 @@ void loop() {
     int secondSeparatorIndex = command.indexOf(',', firstSeparatorIndex + 1);
 
     if (firstSeparatorIndex > 0 && secondSeparatorIndex > 0) {
+
+
       int elevationRateCmd = command.substring(0, firstSeparatorIndex).toInt();
       int azimuthRateCmd = command.substring(firstSeparatorIndex + 1, secondSeparatorIndex).toInt();
-      int shootCommand = command.substring(secondSeparatorIndex + 1).toInt();
+      int gunCommand = command.substring(secondSeparatorIndex + 1).toInt();
+
 
       // Set velocities
       elevationServo.setVelocity(elevationRateCmd);
       azimuthServo.setVelocity(azimuthRateCmd);
 
-      // Handle shoot command
-      if (shootCommand == 1) {
-        shootNow();
+        // Handle shoot command
+      if (gunCommand == GUN_STATE_RELOADED) {
+        shotFiredCounter = 0;
+      }
+      if (shotFiredCounter > maxShotsInMagazin){
+        setGunStateToShutdown();
+      }
+      else {
+        switch (gunCommand) {
+          case GUN_STATE_SHUTDOWN:
+            Serial.print("4 ");
+            setGunStateToShutdown();
+            break;
+          case GUN_STATE_DISARM:
+            Serial.print("5 ");
+            disarmEscs();
+            gunState = GUN_STATE_DISARM;
+            break;
+          case GUN_STATE_ARM:
+            Serial.print("6 ");
+            armEscs();
+            gunState = GUN_STATE_ARM;
+            break;
+          case GUN_STATE_FIRE:
+            Serial.print("7 ");
+            shootNow();
+            gunState = GUN_STATE_FIRE;
+            break;
+          case GUN_STATE_RELOADED:
+            Serial.print("8 ");
+            default:
+            break;
+        }
       }
     }
   }
   else if ((millis() - lastRecivedCommandTimestamp) > maxTargetLossTime) {
-    elevationServo.centrelize();
-    azimuthServo.centrelize();
-    if (shotStates != SHOT_STATE_IDLE){
-      setShotStateToIdle();
-    }
+      Serial.println("9 ");
+      setGunStateToShutdown();
   }
 
   // Update the servos
   elevationServo.update();
   azimuthServo.update();
   handleShot();
+  gunStatePrev = gunState;
   delay(pidLoopDelayMs); // Delay for smoother updates
 }
