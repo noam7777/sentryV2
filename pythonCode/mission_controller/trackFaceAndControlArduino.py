@@ -3,107 +3,84 @@ import numpy as np
 import time
 from SentryController import Controller
 from sentryTracker import Tracker
+from faceDetector import FaceDetector
+import threading
 
 
+class LockAndShootController:
+    def __init__(self, serial_conn):
+        self.faceDetector = FaceDetector()
+        self.sentryController = Controller(serial_conn)
+        self.tracker = Tracker()
+        self.shouldSendCommandsToRobot = False
+        self.running = True
 
+        # Set up video capture
+        self.cap = cv2.VideoCapture(0)
 
-class FaceDetector:
-    def __init__(self):
-        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        self.target_fps = 5
-        self.interval = 1.0 / self.target_fps
-        self.last_detection_time = time.time()
-        self.facesBbox = []
-        self.faceDetected = False
+        # Initialize mask to be the same size as the frame
+        ret, frame = self.cap.read()
+        if not ret:
+            print("Error: Unable to capture the first frame.")
+            self.cap.release()
+            cv2.destroyAllWindows()
+            exit()
 
-    def detectTarget(self) :
-        faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-        return faces
+        self.mask = np.zeros_like(frame)
 
-faceDetector = FaceDetector()
+    def start_auto_control_thread(self):
+        thread = threading.Thread(target=self.auto_turret_pid_loop, daemon=True)
+        thread.start()
 
-# Set up video capture
-cap = cv2.VideoCapture(0)
+    def auto_turret_pid_loop(self):
+        while self.running:
+            # Capture frame-by-frame
+            ret, frame = self.cap.read()
+            if not ret or not self.running:
+                break
 
-# Initialize mask to be the same size as the frame
-ret, frame = cap.read()
-if not ret:
-    print("Error: Unable to capture the first frame.")
-    cap.release()
-    cv2.destroyAllWindows()
-    exit()
+            # Reset mask
+            self.mask = np.zeros_like(frame)
 
-# Create a mask image with the same shape as the frame
-mask = np.zeros_like(frame)
+            # Convert to grayscale
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-sentryController = Controller()
-tracker = Tracker()
+            # Perform face detection
+            current_time = time.time()
+            if (current_time - self.faceDetector.last_detection_time) >= self.faceDetector.interval:
+                faces = self.faceDetector.detectTarget(gray)
+                self.faceDetector.last_detection_time = current_time
 
-while True:
-    # Capture frame-by-frame
-    ret, frame = cap.read()
-    if not ret:
-        break
+                if len(faces) > 0:
+                    self.faceDetector.faceDetected = True
+                    selectedTarget = faces[0]
+                    self.tracker.findNewFeatures(gray, selectedTarget)
+                    self.tracker.updateWeights(selectedTarget)
+                else:
+                    self.faceDetector.faceDetected = False
 
-    # Reset mask to match the current frame's dimensions
-    mask = np.zeros_like(frame)
+            # Process optical flow
+            if self.tracker.p0 is not None and len(self.tracker.p0) > 0:
+                self.tracker.trackFeaturesAndDrawMotion(gray, frame, self.mask)
 
-    # Convert to grayscale for processing
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            # Overlay mask
+            img = cv2.add(frame, self.mask)
 
-    # Perform face detection at the specified interval
-    current_time = time.time()
-    
-    if (current_time - faceDetector.last_detection_time) >= faceDetector.interval:
-        faces = faceDetector.detectTarget()
-        faceDetector.last_detection_time = current_time
+            # Call a callback to update GUI (instead of cv2.imshow)
+            self.update_gui_callback(img)
 
-        if len(faces) > 0:
-            faceDetector.faceDetected = True
-            selectedTarget = faces[0]
+        self.cap.release()
 
-            # Get the bounding box of the first detected face
-            x, y, w, h = selectedTarget
+    def update_gui_callback(self, frame):
+        """
+        Callback to update the Tkinter GUI with the latest frame.
+        """
+        # Convert OpenCV frame (BGR) to RGB
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            tracker.findNewFeatures(gray, selectedTarget)
-            tracker.updateWeights(selectedTarget)
+        # Handle the conversion to Tkinter-compatible image here (e.g., using PIL or Canvas widget)
+        pass
 
-        else:
-            faceDetector.faceDetected = False
+    def stop(self):
+        self.running = False
 
-
-    # Only proceed with optical flow if there are points to track
-    if tracker.p0 is not None and len(tracker.p0) > 0:
-        tracker.trackFeaturesAndDrawMotion(gray, frame, mask)
-
-    # Overlay mask with motion vectors onto frame
-    img = cv2.add(frame, mask)
-
-    # Draw the bounding box around the face
-    for (x, y, w, h) in faces:
-        cv2.rectangle(img, (x, y), (x+w, y+h), (255, 0, 0), 2)
-
-# lock on target mode
-    if tracker.p0 is not None and len(tracker.weights) > 0:
-        avg_position_normalized = tracker.calculate_and_mark_average_position(img)
-        if avg_position_normalized:
-            print(f"Average position: {avg_position_normalized}")
-            sentryController.sentry_pid(avg_position_normalized, faceDetector.faceDetected)
-
-
-    # Display the result
-    cv2.imshow('Face Detection with Optical Flow and Weights', img)
-
-    # Update the old frame and old points
-    old_gray = gray.copy()
-
-    arduino_data = sentryController.read_data()
-    if arduino_data:
-        print(f"Arduino says: {arduino_data}")
-
-    # Exit on ESC key
-    if cv2.waitKey(1) & 0xFF == 27:
-        break
-
-cap.release()
-cv2.destroyAllWindows()

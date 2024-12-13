@@ -3,6 +3,8 @@ import tkinter as tk
 from tkinter import ttk
 import threading
 import time
+from trackFaceAndControlArduino import LockAndShootController
+import cv2
 
 class ArduinoReader:
     def __init__(self, port, baud_rate):
@@ -40,18 +42,21 @@ class ArduinoReader:
         if self.serial_conn:
             self.serial_conn.close()
 
+from PIL import Image, ImageTk
+
 class ArduinoGUI:
     def __init__(self, root, arduino_reader):
         self.root = root
         self.arduino_reader = arduino_reader
 
         self.root.title("Arduino Data Display")
-        self.root.geometry("400x400")
+        self.root.geometry("800x600")  # Adjusted for video display
 
         # Initialize velocity and shooting state
         self.azimuth_velocity = 0
         self.elevation_velocity = 0
         self.gun_command = 0
+        self.auto_mode = False
 
         # Labels to display parsed data
         self.gun_state_label = ttk.Label(root, text="Gun State: --", font=("Arial", 14))
@@ -66,6 +71,9 @@ class ArduinoGUI:
         self.elevation_label = ttk.Label(root, text="Elevation: --", font=("Arial", 14))
         self.elevation_label.pack(pady=10)
 
+        self.mode_label = ttk.Label(root, text="mode: AUTO", font=("Arial", 14))
+        self.mode_label.pack(pady=10)
+
         # Buttons for commands
         self.shutdown_button = ttk.Button(root, text="SHUTDOWN", command=lambda: self.set_gun_command(0))
         self.shutdown_button.pack(pady=5)
@@ -79,8 +87,22 @@ class ArduinoGUI:
         self.fire_button = ttk.Button(root, text="FIRE", command=lambda: self.set_gun_command(3))
         self.fire_button.pack(pady=5)
 
-        self.fire_button = ttk.Button(root, text="RELOAD", command=lambda: self.set_gun_command(4))
-        self.fire_button.pack(pady=5)
+        self.lock_and_shoot_button = ttk.Button(root, text="AUTO_MODE", command=lambda: self.setAutoMode(True))
+        self.lock_and_shoot_button.pack(pady=5)
+
+        self.manual_button = ttk.Button(root, text="MANUAL_MODE", command=lambda: self.setAutoMode(False))
+        self.manual_button.pack(pady=5)
+
+        # Video display Canvas
+        self.canvas = tk.Canvas(root, width=640, height=480, bg="black")
+        self.canvas.pack(pady=10)
+
+        # Initialize LockAndShootController
+        self.lock_and_shoot_controller = LockAndShootController(arduino_reader.serial_conn)
+        self.lock_and_shoot_controller.update_gui_callback = self.update_video_frame
+
+        # Start auto control thread
+        self.lock_and_shoot_controller.start_auto_control_thread()
 
         # Bind keys for azimuth and elevation control
         self.root.bind("<KeyPress>", self.key_press)
@@ -88,6 +110,10 @@ class ArduinoGUI:
 
         self.start_reading_thread()
         self.start_keep_alive_thread()
+
+    def setAutoMode(self, shouldBeInAutoMode) :
+        self.auto_mode = shouldBeInAutoMode
+        self.lock_and_shoot_controller.shouldSendCommandsToRobot = shouldBeInAutoMode
 
     def set_gun_command(self, command):
         self.gun_command = command
@@ -97,26 +123,28 @@ class ArduinoGUI:
         self.arduino_reader.send_command(self.elevation_velocity, self.azimuth_velocity, self.gun_command)
 
     def key_press(self, event):
-        if event.keysym == "w":
-            self.elevation_velocity = -30  # Adjust speed as needed
-        elif event.keysym == "s":
-            self.elevation_velocity = 30
-        elif event.keysym == "a":
-            self.azimuth_velocity = 30
-        elif event.keysym == "d":
-            self.azimuth_velocity = -30
-        elif event.keysym == "Return":
-            self.set_gun_command(3)  # FIRE command
-        self.send_velocity_command()
+        if self.auto_mode == False :
+            if event.keysym == "w":
+                self.elevation_velocity = -30  # Adjust speed as needed
+            elif event.keysym == "s":
+                self.elevation_velocity = 30
+            elif event.keysym == "a":
+                self.azimuth_velocity = 30
+            elif event.keysym == "d":
+                self.azimuth_velocity = -30
+            elif event.keysym == "Return":
+                self.set_gun_command(3)  # FIRE command
+            self.send_velocity_command()
 
     def key_release(self, event):
-        if event.keysym in ("w", "s"):
-            self.elevation_velocity = 0
-        elif event.keysym in ("a", "d"):
-            self.azimuth_velocity = 0
-        elif event.keysym == "Return":
-            self.gun_command = 2  # Reset FIRE command
-        self.send_velocity_command()
+        if self.auto_mode == False :
+            if event.keysym in ("w", "s"):
+                self.elevation_velocity = 0
+            elif event.keysym in ("a", "d"):
+                self.azimuth_velocity = 0
+            elif event.keysym == "Return":
+                self.gun_command = 2  # Reset FIRE command
+            self.send_velocity_command()
 
     def parse_data(self, data):
         try:
@@ -136,12 +164,22 @@ class ArduinoGUI:
         self.darts_left_label.config(text=f"Darts Left: {darts_left}")
         self.azimuth_label.config(text=f"Azimuth: {azimuth}")
         self.elevation_label.config(text=f"Elevation: {elevation}")
+        self.mode_label.config(text=f"auto mode: {self.auto_mode}")
+
+    def update_video_frame(self, frame):
+        # Convert frame (OpenCV BGR) to RGB
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(rgb_frame)
+        imgtk = ImageTk.PhotoImage(image=img)
+
+        # Update canvas
+        self.canvas.create_image(0, 0, anchor=tk.NW, image=imgtk)
+        self.canvas.imgtk = imgtk  # Store reference to avoid garbage collection
 
     def read_from_arduino(self):
         while self.arduino_reader.running:
             data = self.arduino_reader.read_data()
             if data:
-                print(data)
                 gun_state, darts_left, azimuth, elevation = self.parse_data(data)
                 if gun_state is not None:
                     self.update_gui(gun_state, darts_left, azimuth, elevation)
@@ -160,6 +198,7 @@ class ArduinoGUI:
         thread = threading.Thread(target=self.keep_alive, daemon=True)
         thread.start()
 
+
 if __name__ == "__main__":
     # Replace with your Arduino's port
     ARDUINO_PORT = "/dev/ttyUSB0"  # Update as needed
@@ -177,3 +216,5 @@ if __name__ == "__main__":
         print("Exiting...")
     finally:
         arduino_reader.close()
+        gui.lock_and_shoot_controller.cap.release()
+
