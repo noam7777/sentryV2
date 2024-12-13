@@ -84,19 +84,18 @@ class ArduinoGUI:
         self.root.bind("<KeyRelease>", self.key_release)
 
         self.start_reading_thread()
-        self.start_command_publish_thread()
+        self.start_keep_alive_thread()
 
     def set_gun_command(self, command):
         self.gun_command = command
+        self.send_velocity_command()
 
-    def publish_command(self):
-        while self.arduino_reader.running:
-            self.arduino_reader.send_command(self.elevation_velocity, self.azimuth_velocity, self.gun_command)
-            time.sleep(0.2)  # Publish commands every 0.1 seconds
+    def send_velocity_command(self):
+        self.arduino_reader.send_command(self.elevation_velocity, self.azimuth_velocity, self.gun_command)
 
     def key_press(self, event):
         if event.keysym == "w":
-            self.elevation_velocity = 10
+            self.elevation_velocity = 10  # Adjust speed as needed
         elif event.keysym == "s":
             self.elevation_velocity = -10
         elif event.keysym == "a":
@@ -105,6 +104,7 @@ class ArduinoGUI:
             self.azimuth_velocity = 10
         elif event.keysym == "Return":
             self.set_gun_command(3)  # FIRE command
+        self.send_velocity_command()
 
     def key_release(self, event):
         if event.keysym in ("w", "s"):
@@ -112,7 +112,8 @@ class ArduinoGUI:
         elif event.keysym in ("a", "d"):
             self.azimuth_velocity = 0
         elif event.keysym == "Return":
-            self.set_gun_command(0)  # Reset FIRE command
+            self.gun_command = 0  # Reset FIRE command
+        self.send_velocity_command()
 
     def parse_data(self, data):
         try:
@@ -143,12 +144,17 @@ class ArduinoGUI:
                     self.update_gui(gun_state, darts_left, azimuth, elevation)
             time.sleep(0.1)  # Small delay to avoid overwhelming the CPU
 
+    def keep_alive(self):
+        while self.arduino_reader.running:
+            self.send_velocity_command()  # Send a message to keep the Arduino active
+            time.sleep(1)  # Send every 1 second
+
     def start_reading_thread(self):
         thread = threading.Thread(target=self.read_from_arduino, daemon=True)
         thread.start()
 
-    def start_command_publish_thread(self):
-        thread = threading.Thread(target=self.publish_command, daemon=True)
+    def start_keep_alive_thread(self):
+        thread = threading.Thread(target=self.keep_alive, daemon=True)
         thread.start()
 
 if __name__ == "__main__":
