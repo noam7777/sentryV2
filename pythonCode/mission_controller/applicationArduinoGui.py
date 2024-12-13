@@ -79,6 +79,9 @@ class ArduinoGUI:
         self.fire_button = ttk.Button(root, text="FIRE", command=lambda: self.set_gun_command(3))
         self.fire_button.pack(pady=5)
 
+        self.fire_button = ttk.Button(root, text="RELOAD", command=lambda: self.set_gun_command(4))
+        self.fire_button.pack(pady=5)
+
         # Bind keys for azimuth and elevation control
         self.root.bind("<KeyPress>", self.key_press)
         self.root.bind("<KeyRelease>", self.key_release)
@@ -95,13 +98,13 @@ class ArduinoGUI:
 
     def key_press(self, event):
         if event.keysym == "w":
-            self.elevation_velocity = 10  # Adjust speed as needed
+            self.elevation_velocity = -30  # Adjust speed as needed
         elif event.keysym == "s":
-            self.elevation_velocity = -10
+            self.elevation_velocity = 30
         elif event.keysym == "a":
-            self.azimuth_velocity = -10
+            self.azimuth_velocity = 30
         elif event.keysym == "d":
-            self.azimuth_velocity = 10
+            self.azimuth_velocity = -30
         elif event.keysym == "Return":
             self.set_gun_command(3)  # FIRE command
         self.send_velocity_command()
@@ -112,7 +115,7 @@ class ArduinoGUI:
         elif event.keysym in ("a", "d"):
             self.azimuth_velocity = 0
         elif event.keysym == "Return":
-            self.gun_command = 0  # Reset FIRE command
+            self.gun_command = 2  # Reset FIRE command
         self.send_velocity_command()
 
     def parse_data(self, data):
