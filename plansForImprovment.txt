@@ -1,5 +1,5 @@
 
-
+-------done-------
 modes to implement on arduino:
 arduino - shut down mode when communication lost with the computer
 set the shoot command for gun command:
@@ -9,11 +9,11 @@ set the shoot command for gun command:
 3 - shutdown - centrelize, disarm
 4 - reloaded - set fire shot count to zero
 
+-----------TODO:----------
 
-shutdown - centrelize, disarm, and stop servos
-reload - set 
-
-
+view mode of the sentry with pyserial and tkinter
+view current sentry pose
+view how much darts left
 
 modes to implement in python:
 sentry modes:
@@ -24,8 +24,6 @@ sentry modes:
 
 
 terminatorMode: add scan and look for enemies. lock on them and shoot when able.
-
-
 
 
 
