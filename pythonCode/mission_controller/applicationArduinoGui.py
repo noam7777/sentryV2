@@ -5,6 +5,9 @@ import threading
 import time
 from trackFaceAndControlArduino import LockAndShootController
 import cv2
+from datetime import datetime # for the record file name
+import os # for creating a recording folder
+
 
 class ArduinoReader:
     def __init__(self, port, baud_rate):
@@ -60,6 +63,9 @@ class ArduinoGUI:
         self.should_send_commands_manually = True
         self.lastSentCommandTimeStamp = 0
 
+        # Placeholder for the filename
+        self.video_filename = None
+
         # Initialize LockAndShootController
         self.lock_and_shoot_controller = LockAndShootController(arduino_reader.serial_conn)
         self.lock_and_shoot_controller.update_gui_callback = self.update_video_frame
@@ -107,12 +113,25 @@ class ArduinoGUI:
         self.precised_shot_toggle_button.pack(pady=20)
         self.precised_shot_toggle_button.is_on = False  # Start with OFF
 
+        # VIDEO HANDLING
         self.manual_button = ttk.Button(root, text="MANUAL_MODE", command=lambda: self.setAutoMode(False))
         self.manual_button.pack(pady=5)
+
+        # Recording state
+        self.is_recording = False
+        self.video_writer = None
 
         # Video display Canvas
         self.canvas = tk.Canvas(root, width=640, height=480, bg="black")
         self.canvas.pack(pady=10)
+
+        # Buttons for recording
+        self.record_button = ttk.Button(root, text="Record", command=self.start_recording)
+        self.record_button.pack(pady=5)
+
+        self.stop_button = ttk.Button(root, text="Stop Recording", command=self.stop_recording)
+        self.stop_button.pack(pady=5)
+
 
         # Bind keys for azimuth and elevation control
         self.root.bind("<KeyPress>", self.key_press)
@@ -120,6 +139,58 @@ class ArduinoGUI:
 
         self.start_reading_thread()
         self.start_command_sending_thread()
+
+    def update_video_frame(self, frame):
+        # Convert frame (OpenCV BGR) to RGB
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(rgb_frame)
+        imgtk = ImageTk.PhotoImage(image=img)
+
+        # Update canvas
+        self.canvas.create_image(0, 0, anchor=tk.NW, image=imgtk)
+        self.canvas.imgtk = imgtk  # Store reference to avoid garbage collection
+
+        # Write frame to video file if recording
+        if self.is_recording and self.video_writer:
+            self.video_writer.write(frame)
+
+    def start_recording(self):
+        if not self.is_recording:
+            # Set recording state
+            self.is_recording = True
+
+            # Create recordings folder if it doesn't exist
+            recordings_folder = "recordings"
+            if not os.path.exists(recordings_folder):
+                os.makedirs(recordings_folder)
+
+            # Generate a unique filename based on the current time
+            self.video_filename = os.path.join(
+                recordings_folder,
+                datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".avi"
+            )
+
+            # Initialize video writer
+            frame_width = 640  # Set the frame width (same as canvas width)
+            frame_height = 480  # Set the frame height (same as canvas height)
+            fps = 30  # Frames per second for the video
+
+            # Define codec and create VideoWriter object
+            self.video_writer = cv2.VideoWriter(
+                self.video_filename, cv2.VideoWriter_fourcc(*'XVID'), fps, (frame_width, frame_height)
+            )
+            print(f"Recording started. Video will be saved as {self.video_filename}")
+
+    def stop_recording(self):
+        if self.is_recording:
+            # Stop recording state
+            self.is_recording = False
+
+            # Release video writer
+            if self.video_writer:
+                self.video_writer.release()
+                self.video_writer = None
+                print(f"Recording stopped. Video saved as {self.video_filename}")
 
     def toggle_precised_shot_button(self):
         # Toggle the button state and text
@@ -196,15 +267,15 @@ class ArduinoGUI:
         self.elevation_label.config(text=f"Elevation: {elevation}")
         self.mode_label.config(text=f"auto mode: {not(self.should_send_commands_manually)}")
 
-    def update_video_frame(self, frame):
-        # Convert frame (OpenCV BGR) to RGB
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img = Image.fromarray(rgb_frame)
-        imgtk = ImageTk.PhotoImage(image=img)
+    # def update_video_frame(self, frame):
+    #     # Convert frame (OpenCV BGR) to RGB
+    #     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    #     img = Image.fromarray(rgb_frame)
+    #     imgtk = ImageTk.PhotoImage(image=img)
 
-        # Update canvas
-        self.canvas.create_image(0, 0, anchor=tk.NW, image=imgtk)
-        self.canvas.imgtk = imgtk  # Store reference to avoid garbage collection
+    #     # Update canvas
+    #     self.canvas.create_image(0, 0, anchor=tk.NW, image=imgtk)
+    #     self.canvas.imgtk = imgtk  # Store reference to avoid garbage collection
 
     def read_from_arduino(self):
         while self.arduino_reader.running:
