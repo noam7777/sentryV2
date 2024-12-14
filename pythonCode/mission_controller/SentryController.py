@@ -6,11 +6,12 @@ class Controller:
         self.kP_azimuth = kP_azimuth
         self.kP_elevation = kP_elevation
         self.targetErrorToShoot = 0.1
+        self.targetCenteredCountToShoot = 5
         self.serial_conn = serial_conn
         time.sleep(2)  # Allow connection to initialize
         self.currentCommand = (0, 0, 2)
 
-    def sentry_pid(self, avg_position, is_face_detected, isCameraCenterInBbox):
+    def sentry_pid(self, avg_position, is_face_detected, isCameraCenterInBbox, shouldPerformPrecisedShoot):
         """
         PID control logic for directing the robot.
         """
@@ -26,7 +27,17 @@ class Controller:
         errorX = -(targetPosX - 0.5)
         errorY = (targetPosY - 0.5)
 
-        gunCommand = 3 if (isCameraCenterInBbox) else 2  # 3 for shoot and 2 for arm
+        gunCommand = 2
+        if shouldPerformPrecisedShoot :
+            if (((errorX ** 2 + errorY ** 2) ** 0.5) < self.targetErrorToShoot):
+                self.targetCenteredCounter += 1
+            else:
+                self.targetCenteredCounter = 0
+
+            gunCommand = 3 if (self.targetCenteredCounter > self.targetCenteredCountToShoot and is_face_detected) else 2  # 3 for shoot and 2 for arm
+        else :
+            self.targetCenteredCounter = 0
+            gunCommand = 3 if (isCameraCenterInBbox) else 2  # 3 for shoot and 2 for arm
 
         cmd_azimuth = int(errorX * self.kP_azimuth)
         cmd_elevation = int(errorY * self.kP_elevation)

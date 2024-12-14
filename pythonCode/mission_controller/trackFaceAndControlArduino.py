@@ -14,6 +14,7 @@ class LockAndShootController:
         self.tracker = Tracker()
         self.shouldSendCommandsToRobot = False
         self.running = True
+        self.shouldPerformPrecisedShoot = False
 
         # Set up video capture
         self.cap = cv2.VideoCapture(0)
@@ -85,7 +86,7 @@ class LockAndShootController:
                         if self.faceDetector.isFaceDetected :
                             height, width = img.shape[:2]
                             isCameraCenterInBbox = self.isPointInBbox(0.5 * width, 0.5 * height, faces[0])
-                        self.sentryController.sentry_pid(avg_position_normalized, self.faceDetector.isFaceDetected, isCameraCenterInBbox)
+                        self.sentryController.sentry_pid(avg_position_normalized, self.faceDetector.isFaceDetected, isCameraCenterInBbox, self.shouldPerformPrecisedShoot)
 
 
 

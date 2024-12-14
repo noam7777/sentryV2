@@ -59,6 +59,14 @@ class ArduinoGUI:
         self.gun_command = 0
         self.should_send_commands_manually = True
         self.lastSentCommandTimeStamp = 0
+
+        # Initialize LockAndShootController
+        self.lock_and_shoot_controller = LockAndShootController(arduino_reader.serial_conn)
+        self.lock_and_shoot_controller.update_gui_callback = self.update_video_frame
+
+        # Start auto control thread
+        self.lock_and_shoot_controller.start_auto_control_thread()
+
         # Labels to display parsed data
         self.gun_state_label = ttk.Label(root, text="Gun State: --", font=("Arial", 14))
         self.gun_state_label.pack(pady=10)
@@ -94,19 +102,17 @@ class ArduinoGUI:
         self.lock_and_shoot_button = ttk.Button(root, text="AUTO_MODE", command=lambda: self.setAutoMode(True))
         self.lock_and_shoot_button.pack(pady=5)
 
+        # Create a toggle button
+        self.precised_shot_toggle_button = tk.Button(root, text="OFF", bg="red", command=self.toggle_precised_shot_button, width=10, height=2)
+        self.precised_shot_toggle_button.pack(pady=20)
+        self.precised_shot_toggle_button.is_on = False  # Start with OFF
+
         self.manual_button = ttk.Button(root, text="MANUAL_MODE", command=lambda: self.setAutoMode(False))
         self.manual_button.pack(pady=5)
 
         # Video display Canvas
         self.canvas = tk.Canvas(root, width=640, height=480, bg="black")
         self.canvas.pack(pady=10)
-
-        # Initialize LockAndShootController
-        self.lock_and_shoot_controller = LockAndShootController(arduino_reader.serial_conn)
-        self.lock_and_shoot_controller.update_gui_callback = self.update_video_frame
-
-        # Start auto control thread
-        self.lock_and_shoot_controller.start_auto_control_thread()
 
         # Bind keys for azimuth and elevation control
         self.root.bind("<KeyPress>", self.key_press)
@@ -115,6 +121,17 @@ class ArduinoGUI:
         self.start_reading_thread()
         self.start_command_sending_thread()
 
+    def toggle_precised_shot_button(self):
+        # Toggle the button state and text
+        if self.precised_shot_toggle_button.is_on:
+            self.precised_shot_toggle_button.is_on = False
+            self.lock_and_shoot_controller.shouldPerformPrecisedShoot = False
+            self.precised_shot_toggle_button.config(text="OFF", bg="red")
+        else:
+            self.precised_shot_toggle_button.is_on = True
+            self.lock_and_shoot_controller.shouldPerformPrecisedShoot = True
+            self.precised_shot_toggle_button.config(text="ON", bg="green")
+    
     def setAutoMode(self, shouldBeInAutoMode) :
         self.should_send_commands_manually = False
         self.lock_and_shoot_controller.shouldSendCommandsToRobot = False
