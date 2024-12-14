@@ -36,7 +36,8 @@ class ArduinoReader:
                 self.serial_conn.write(command.encode('utf-8'))
             except Exception as e:
                 print(f"Error sending command: {e}")
-
+        else :
+            print("no serial conn")
     def close(self):
         self.running = False
         if self.serial_conn:
@@ -53,11 +54,11 @@ class ArduinoGUI:
         self.root.geometry("800x600")  # Adjusted for video display
 
         # Initialize velocity and shooting state
-        self.azimuth_velocity = 0
-        self.elevation_velocity = 0
+        self.manual_azimuth_velocity = 0
+        self.manual_elevation_velocity = 0
         self.gun_command = 0
-        self.auto_mode = False
-
+        self.should_send_commands_manually = True
+        self.lastSentCommandTimeStamp = 0
         # Labels to display parsed data
         self.gun_state_label = ttk.Label(root, text="Gun State: --", font=("Arial", 14))
         self.gun_state_label.pack(pady=10)
@@ -87,6 +88,9 @@ class ArduinoGUI:
         self.fire_button = ttk.Button(root, text="FIRE", command=lambda: self.set_gun_command(3))
         self.fire_button.pack(pady=5)
 
+        self.fire_button = ttk.Button(root, text="RELOAD", command=lambda: self.set_gun_command(4))
+        self.fire_button.pack(pady=5)
+
         self.lock_and_shoot_button = ttk.Button(root, text="AUTO_MODE", command=lambda: self.setAutoMode(True))
         self.lock_and_shoot_button.pack(pady=5)
 
@@ -109,42 +113,51 @@ class ArduinoGUI:
         self.root.bind("<KeyRelease>", self.key_release)
 
         self.start_reading_thread()
-        self.start_keep_alive_thread()
+        self.start_command_sending_thread()
 
     def setAutoMode(self, shouldBeInAutoMode) :
-        self.auto_mode = shouldBeInAutoMode
-        self.lock_and_shoot_controller.shouldSendCommandsToRobot = shouldBeInAutoMode
+        self.should_send_commands_manually = False
+        self.lock_and_shoot_controller.shouldSendCommandsToRobot = False
+        if (shouldBeInAutoMode):
+            self.lock_and_shoot_controller.shouldSendCommandsToRobot = True
+        else:
+            self.should_send_commands_manually = True
+
+
+
 
     def set_gun_command(self, command):
         self.gun_command = command
-        self.send_velocity_command()
+        self.send_commands()
 
-    def send_velocity_command(self):
-        self.arduino_reader.send_command(self.elevation_velocity, self.azimuth_velocity, self.gun_command)
+    def send_commands(self):
+        self.lastSentCommandTimeStamp = time.time()
+
+        if self.should_send_commands_manually :
+            self.arduino_reader.send_command(self.manual_elevation_velocity, self.manual_azimuth_velocity, self.gun_command)
+        else:
+            auto_elevation_velocity, auto_azimuth_velocity, auto_gun_command =  self.lock_and_shoot_controller.sentryController.currentCommand
+            self.arduino_reader.send_command(auto_elevation_velocity, auto_azimuth_velocity, auto_gun_command)
 
     def key_press(self, event):
-        if self.auto_mode == False :
-            if event.keysym == "w":
-                self.elevation_velocity = -30  # Adjust speed as needed
-            elif event.keysym == "s":
-                self.elevation_velocity = 30
-            elif event.keysym == "a":
-                self.azimuth_velocity = 30
-            elif event.keysym == "d":
-                self.azimuth_velocity = -30
-            elif event.keysym == "Return":
-                self.set_gun_command(3)  # FIRE command
-            self.send_velocity_command()
+        if event.keysym == "w":
+            self.manual_elevation_velocity = -30  # Adjust speed as needed
+        elif event.keysym == "s":
+            self.manual_elevation_velocity = 30
+        elif event.keysym == "a":
+            self.manual_azimuth_velocity = 30
+        elif event.keysym == "d":
+            self.manual_azimuth_velocity = -30
+        elif event.keysym == "Return":
+            self.set_gun_command(3)  # FIRE command
 
     def key_release(self, event):
-        if self.auto_mode == False :
-            if event.keysym in ("w", "s"):
-                self.elevation_velocity = 0
-            elif event.keysym in ("a", "d"):
-                self.azimuth_velocity = 0
-            elif event.keysym == "Return":
-                self.gun_command = 2  # Reset FIRE command
-            self.send_velocity_command()
+        if event.keysym in ("w", "s"):
+            self.manual_elevation_velocity = 0
+        elif event.keysym in ("a", "d"):
+            self.manual_azimuth_velocity = 0
+        elif event.keysym == "Return":
+            self.gun_command = 2  # Reset FIRE command
 
     def parse_data(self, data):
         try:
@@ -164,7 +177,7 @@ class ArduinoGUI:
         self.darts_left_label.config(text=f"Darts Left: {darts_left}")
         self.azimuth_label.config(text=f"Azimuth: {azimuth}")
         self.elevation_label.config(text=f"Elevation: {elevation}")
-        self.mode_label.config(text=f"auto mode: {self.auto_mode}")
+        self.mode_label.config(text=f"auto mode: {not(self.should_send_commands_manually)}")
 
     def update_video_frame(self, frame):
         # Convert frame (OpenCV BGR) to RGB
@@ -185,17 +198,20 @@ class ArduinoGUI:
                     self.update_gui(gun_state, darts_left, azimuth, elevation)
             time.sleep(0.1)  # Small delay to avoid overwhelming the CPU
 
-    def keep_alive(self):
+    def send_commands_task(self):
         while self.arduino_reader.running:
-            self.send_velocity_command()  # Send a message to keep the Arduino active
-            time.sleep(1)  # Send every 1 second
+            current_time = time.time()
+            if (current_time -  self.lastSentCommandTimeStamp) > 0.1:
+                self.send_commands()  # Send a message to keep the Arduino active
+                time.sleep(0.2)  # Send every 1 second
+                
 
     def start_reading_thread(self):
         thread = threading.Thread(target=self.read_from_arduino, daemon=True)
         thread.start()
 
-    def start_keep_alive_thread(self):
-        thread = threading.Thread(target=self.keep_alive, daemon=True)
+    def start_command_sending_thread(self):
+        thread = threading.Thread(target=self.send_commands_task, daemon=True)
         thread.start()
 
 

@@ -66,6 +66,22 @@ class LockAndShootController:
             # Overlay mask
             img = cv2.add(frame, self.mask)
 
+            # Draw the bounding box around the face
+            for (x, y, w, h) in faces:
+                cv2.rectangle(img, (x, y), (x+w, y+h), (255, 0, 0), 2)
+
+            # lock on target mode
+            if self.shouldSendCommandsToRobot:
+                if self.tracker.p0 is not None and len(self.tracker.weights) > 0:
+                    avg_position_normalized = self.tracker.calculate_and_mark_average_position(img)
+                    if avg_position_normalized:
+                        # print(f"Average position: {avg_position_normalized}")
+                        self.sentryController.sentry_pid(avg_position_normalized, self.faceDetector.faceDetected)
+
+
+
+
+
             # Call a callback to update GUI (instead of cv2.imshow)
             self.update_gui_callback(img)
 
