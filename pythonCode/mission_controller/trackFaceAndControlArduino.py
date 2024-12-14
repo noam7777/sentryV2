@@ -32,6 +32,11 @@ class LockAndShootController:
         thread = threading.Thread(target=self.auto_turret_pid_loop, daemon=True)
         thread.start()
 
+    def isPointInBbox(self, pointX, pointY, bbox):
+        x, y, w, h = bbox  # Unpack the bounding box
+        # Check if the point is within the bounds of the bounding box
+        return x <= pointX <= x + w and y <= pointY <= y + h
+
     def auto_turret_pid_loop(self):
         while self.running:
             # Capture frame-by-frame
@@ -52,12 +57,12 @@ class LockAndShootController:
                 self.faceDetector.last_detection_time = current_time
 
                 if len(faces) > 0:
-                    self.faceDetector.faceDetected = True
+                    self.faceDetector.isFaceDetected = True
                     selectedTarget = faces[0]
                     self.tracker.findNewFeatures(gray, selectedTarget)
                     self.tracker.updateWeights(selectedTarget)
                 else:
-                    self.faceDetector.faceDetected = False
+                    self.faceDetector.isFaceDetected = False
 
             # Process optical flow
             if self.tracker.p0 is not None and len(self.tracker.p0) > 0:
@@ -76,7 +81,11 @@ class LockAndShootController:
                     avg_position_normalized = self.tracker.calculate_and_mark_average_position(img)
                     if avg_position_normalized:
                         # print(f"Average position: {avg_position_normalized}")
-                        self.sentryController.sentry_pid(avg_position_normalized, self.faceDetector.faceDetected)
+                        isCameraCenterInBbox = False
+                        if self.faceDetector.isFaceDetected :
+                            height, width = img.shape[:2]
+                            isCameraCenterInBbox = self.isPointInBbox(0.5 * width, 0.5 * height, faces[0])
+                        self.sentryController.sentry_pid(avg_position_normalized, self.faceDetector.isFaceDetected, isCameraCenterInBbox)
 
 
 
