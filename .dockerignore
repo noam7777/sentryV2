@@ -1,0 +1,15 @@
+# Exclude virtual environment
+venv-sentry/
+
+# Exclude CAD files
+3dFiles/
+
+# Exclude plans and documentation
+plansForImprovment.txt
+
+# Exclude Git files
+.git/
+.gitignore
+
+# Exclude recording logs if not needed
+recordings/
