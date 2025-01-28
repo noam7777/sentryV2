@@ -1,6 +1,3 @@
-# Exclude virtual environment
-venv-sentry/
-
 # Exclude CAD files
 3dFiles/
 
