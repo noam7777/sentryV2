@@ -3,15 +3,18 @@ import numpy as np
 import time
 from SentryController import Controller
 from sentryTracker import Tracker
-from faceDetector import FaceDetector
+from faceDetector import FaceClassifier
+from faceDetector import FaceDetection
+from faceDetector import TargetSelector
 import threading
 
 
 class LockAndShootController:
     def __init__(self, serial_conn):
-        self.faceDetector = FaceDetector()
+        self.faceClassifier = FaceClassifier()
         self.sentryController = Controller(serial_conn)
         self.tracker = Tracker()
+        self.targetSelector = TargetSelector()
         self.shouldSendCommandsToRobot = False
         self.running = True
         self.shouldPerformPrecisedShoot = False
@@ -53,17 +56,15 @@ class LockAndShootController:
 
             # Perform face detection
             current_time = time.time()
-            if (current_time - self.faceDetector.last_detection_time) >= self.faceDetector.interval:
-                faces = self.faceDetector.detectTarget(gray)
-                self.faceDetector.last_detection_time = current_time
+            if (current_time - self.faceClassifier.last_detection_time) >= self.faceClassifier.interval:
+                faces = self.faceClassifier.process_frame(frame)
+                self.faceClassifier.last_detection_time = current_time
+                isValidTargetDetected = self.targetSelector.pickAnEnemyDetection(faces)
 
-                if len(faces) > 0:
-                    self.faceDetector.isFaceDetected = True
-                    selectedTarget = faces[0]
-                    self.tracker.findNewFeatures(gray, selectedTarget)
-                    self.tracker.updateWeights(selectedTarget)
-                else:
-                    self.faceDetector.isFaceDetected = False
+                if isValidTargetDetected:
+                    selectedTargetBbox = self.targetSelector.currentChosenTarget
+                    self.tracker.findNewFeatures(gray, selectedTargetBbox)
+                    self.tracker.updateWeights(selectedTargetBbox)
 
             # Process optical flow
             if self.tracker.p0 is not None and len(self.tracker.p0) > 0:
@@ -73,7 +74,8 @@ class LockAndShootController:
             img = cv2.add(frame, self.mask)
 
             # Draw the bounding box around the face
-            for (x, y, w, h) in faces:
+            for faceDetection in faces:
+                (x, y, w, h) = faceDetection.bounding_box
                 cv2.rectangle(img, (x, y), (x+w, y+h), (255, 0, 0), 2)
 
             # lock on target mode
@@ -83,10 +85,10 @@ class LockAndShootController:
                     if avg_position_normalized:
                         # print(f"Average position: {avg_position_normalized}")
                         isCameraCenterInBbox = False
-                        if self.faceDetector.isFaceDetected :
+                        if isValidTargetDetected :
                             height, width = img.shape[:2]
-                            isCameraCenterInBbox = self.isPointInBbox(0.5 * width, 0.5 * height, faces[0])
-                        self.sentryController.sentry_pid(avg_position_normalized, self.faceDetector.isFaceDetected, isCameraCenterInBbox, self.shouldPerformPrecisedShoot)
+                            isCameraCenterInBbox = self.isPointInBbox(0.5 * width, 0.5 * height, self.targetSelector.currentChosenTarget.bounding_box)
+                        self.sentryController.sentry_pid(avg_position_normalized, self.faceClassifier.isFaceDetected, isCameraCenterInBbox, self.shouldPerformPrecisedShoot)
 
 
 

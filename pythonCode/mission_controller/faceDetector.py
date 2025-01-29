@@ -3,16 +3,33 @@ import face_recognition
 import time
 
 class FaceDetection:
-    def __init__(self, bounding_box, face_id, encoding):
+    def __init__(self, bounding_box=(0, 0, 0,0), face_id="Unknown", encoding=None):
         self.bounding_box = bounding_box  # (x, y, w, h)
         self.face_id = face_id            # "Friend_1", "Unknown", etc.
         self.encoding = encoding          # Face encoding (128-dimensional vector)
 
+class TargetSelector:
+    '''
+    this class handles picking the right target to follow and shoot on
+    '''
+    def __init__(self):
+        self.currentChosenTarget = FaceDetection()
+    
+    def pickAnEnemyDetection(self, faceDetections = []) :
+        for faceDetection in faceDetections :
+            if faceDetection.face_id == "Unknown" :
+                self.currentChosenTarget = faceDetection
+                return True
+        return False
+
+
 class FaceClassifier:
     def __init__(self):
-        # Initialize general face detector (Haar Cascade)
-        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        
+        self.target_fps = 5
+        self.interval = 1.0 / self.target_fps
+        self.last_detection_time = time.time()
+        self.faceDetected = False
+
         # Known faces and their encodings
         self.known_face_encodings = []
         self.known_face_names = []
