@@ -17,26 +17,35 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
  
+RUN mkdir -p /app/data
+
 # Update pip
 RUN python3.9 -m pip install --upgrade pip
 
-# Set the working directory
-WORKDIR /app
-
 # Set the PATH to include the local binaries
-ENV PATH="/home/appuser/.local/bin:$PATH"
+ENV PATH="/home/appuser/.local/bin:${PATH}"
 
 # Install Python dependencies
 RUN pip install --no-cache-dir opencv-python
 RUN pip install --no-cache-dir tk
 RUN pip install --no-cache-dir pillow
 RUN pip install --no-cache-dir pyserial
-
 # Install dlib
 RUN pip install --no-cache-dir dlib
 
 # Install face_recognition
 RUN pip install --no-cache-dir face_recognition
+
+# Create a new user with a home directory
+RUN useradd -m -G video,dialout appuser
+
+# Switch to the new user
+USER appuser
+
+
+# Set the working directory
+WORKDIR /app
+
 
 # Copy code to the container
 COPY pythonCode /app/pythonCode/
