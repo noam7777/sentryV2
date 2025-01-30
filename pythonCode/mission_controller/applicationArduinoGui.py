@@ -113,6 +113,11 @@ class ArduinoGUI:
         self.precised_shot_toggle_button.pack(pady=20)
         self.precised_shot_toggle_button.is_on = False  # Start with OFF
 
+        # Add a switch (toggle) for some functionality
+        self.switch_var = tk.BooleanVar(value=False)  # Default: OFF
+        self.switch = ttk.Checkbutton(root, text="Friend Learning", variable=self.switch_var, command=self.toggle_switch, style="Switch.TCheckbutton")
+        self.switch.pack(pady=10)
+
         # VIDEO HANDLING
         self.manual_button = ttk.Button(root, text="MANUAL_MODE", command=lambda: self.setAutoMode(False))
         self.manual_button.pack(pady=5)
@@ -210,6 +215,15 @@ class ArduinoGUI:
             self.lock_and_shoot_controller.shouldSendCommandsToRobot = True
         else:
             self.should_send_commands_manually = True
+
+    def toggle_switch(self):
+        if self.switch_var.get():
+            print("Friend Learning Mode")
+            self.lock_and_shoot_controller.faceClassifier.mode = "friendLearning"
+        else:
+            self.lock_and_shoot_controller.faceClassifier.mode = "friendsAndFoesDetection"
+            print("friendsAndFoesDetection Mode")
+            # Implement OFF functionality here
 
 
 

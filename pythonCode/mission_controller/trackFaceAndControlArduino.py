@@ -62,7 +62,7 @@ class LockAndShootController:
                 isValidTargetDetected = self.targetSelector.pickAnEnemyDetection(faces)
 
                 if isValidTargetDetected:
-                    selectedTargetBbox = self.targetSelector.currentChosenTarget
+                    selectedTargetBbox = self.targetSelector.currentChosenTarget.bounding_box
                     self.tracker.findNewFeatures(gray, selectedTargetBbox)
                     self.tracker.updateWeights(selectedTargetBbox)
 
@@ -74,9 +74,29 @@ class LockAndShootController:
             img = cv2.add(frame, self.mask)
 
             # Draw the bounding box around the face
+            # for faceDetection in faces:
+                # (x, y, w, h) = faceDetection.bounding_box
+                # cv2.rectangle(img, (x, y), (x+w, y+h), (255, 0, 0), 2)
+        # Draw the picture frame border based on the mode
+
+            # Draw bounding boxes and labels for each detected face
             for faceDetection in faces:
-                (x, y, w, h) = faceDetection.bounding_box
-                cv2.rectangle(img, (x, y), (x+w, y+h), (255, 0, 0), 2)
+                x, y, w, h = faceDetection.bounding_box
+                if faceDetection.face_id.startswith("Friend"):
+                    color = (255, 0, 0)  # Blue for friends
+                else:
+                    color = (0, 0, 255)  # Red for unknowns
+
+                cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
+                cv2.putText(img, faceDetection.face_id, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+            if self.faceClassifier.mode == "friendsAndFoesDetection":
+                border_color = (255, 255, 0)  # Cyan for friendLearning
+            else:
+                border_color = (0, 0, 255)  # Red for friendsAndFoesDetection
+
+            img = cv2.copyMakeBorder(img, 10, 0, 0, 0, cv2.BORDER_CONSTANT, value=border_color)
+
 
             # lock on target mode
             if self.shouldSendCommandsToRobot:

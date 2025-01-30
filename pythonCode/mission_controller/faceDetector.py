@@ -25,7 +25,7 @@ class TargetSelector:
 
 class FaceClassifier:
     def __init__(self):
-        self.target_fps = 5
+        self.target_fps = 2
         self.interval = 1.0 / self.target_fps
         self.last_detection_time = time.time()
         self.faceDetected = False
