@@ -113,10 +113,10 @@ class ArduinoGUI:
         self.precised_shot_toggle_button.pack(pady=20)
         self.precised_shot_toggle_button.is_on = False  # Start with OFF
 
-        # Add a switch (toggle) for some functionality
-        self.switch_var = tk.BooleanVar(value=False)  # Default: OFF
-        self.switch = ttk.Checkbutton(root, text="Friend Learning", variable=self.switch_var, command=self.toggle_switch, style="Switch.TCheckbutton")
-        self.switch.pack(pady=10)
+        # Create a toggle button
+        self.friend_learning_toggle_button = tk.Button(root, text="Foes Detect", bg="red", command=self.toggle_friend_learning_state, width=10, height=2)
+        self.friend_learning_toggle_button.pack(pady=20)
+        self.friend_learning_toggle_button.is_on = False  # Start with OFF
 
         # VIDEO HANDLING
         self.manual_button = ttk.Button(root, text="MANUAL_MODE", command=lambda: self.setAutoMode(False))
@@ -202,11 +202,11 @@ class ArduinoGUI:
         if self.precised_shot_toggle_button.is_on:
             self.precised_shot_toggle_button.is_on = False
             self.lock_and_shoot_controller.shouldPerformPrecisedShoot = False
-            self.precised_shot_toggle_button.config(text="OFF", bg="red")
+            self.precised_shot_toggle_button.config(text="approx shot", bg="red")
         else:
             self.precised_shot_toggle_button.is_on = True
             self.lock_and_shoot_controller.shouldPerformPrecisedShoot = True
-            self.precised_shot_toggle_button.config(text="ON", bg="green")
+            self.precised_shot_toggle_button.config(text="precise shot", bg="green")
     
     def setAutoMode(self, shouldBeInAutoMode) :
         self.should_send_commands_manually = False
@@ -216,17 +216,17 @@ class ArduinoGUI:
         else:
             self.should_send_commands_manually = True
 
-    def toggle_switch(self):
-        if self.switch_var.get():
-            print("Friend Learning Mode")
-            self.lock_and_shoot_controller.faceClassifier.mode = "friendLearning"
-        else:
+    def toggle_friend_learning_state(self):
+        # Toggle the button state and text
+        if self.friend_learning_toggle_button.is_on:
+            self.friend_learning_toggle_button.is_on = False
             self.lock_and_shoot_controller.faceClassifier.mode = "friendsAndFoesDetection"
-            print("friendsAndFoesDetection Mode")
-            # Implement OFF functionality here
-
-
-
+            self.friend_learning_toggle_button.config(text="FoesDetection", bg="red")
+        else:
+            self.friend_learning_toggle_button.is_on = True
+            self.lock_and_shoot_controller.shouldPerformPrecisedShoot = True
+            self.lock_and_shoot_controller.faceClassifier.mode = "friendLearning"
+            self.friend_learning_toggle_button.config(text="friendLearning", bg="blue")
 
     def set_gun_command(self, command):
         self.gun_command = command

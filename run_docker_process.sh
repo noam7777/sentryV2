@@ -5,7 +5,7 @@ docker run -it --rm \
     --device=/dev/ttyUSB0:/dev/ttyUSB0 \
     -e DISPLAY=$DISPLAY \
     -v /tmp/.X11-unix:/tmp/.X11-unix \
-    -v $(pwd):/app \
+    -v $(pwd)/pythonCode:/app/pythonCode \
     -w /app \
     webcam-opencv
 

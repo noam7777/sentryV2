@@ -35,7 +35,7 @@ class FaceClassifier:
         self.known_face_names = []
 
         # Modes
-        self.mode = "friendLearning"  # "friendLearning" or "friendsAndFoesDetection"
+        self.mode = "friendsAndFoesDetection"  # "friendLearning" or "friendsAndFoesDetection"
 
     def set_mode(self, mode):
         if mode not in ["friendLearning", "friendsAndFoesDetection"]:

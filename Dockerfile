@@ -42,13 +42,8 @@ RUN useradd -m -G video,dialout appuser
 # Switch to the new user
 USER appuser
 
-
 # Set the working directory
 WORKDIR /app
-
-
-# Copy code to the container
-COPY pythonCode /app/pythonCode/
 
 # Default command to run the container
 CMD ["bash"]

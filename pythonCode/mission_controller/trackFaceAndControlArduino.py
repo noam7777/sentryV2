@@ -91,9 +91,9 @@ class LockAndShootController:
                 cv2.putText(img, faceDetection.face_id, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
             if self.faceClassifier.mode == "friendsAndFoesDetection":
-                border_color = (255, 255, 0)  # Cyan for friendLearning
-            else:
                 border_color = (0, 0, 255)  # Red for friendsAndFoesDetection
+            else:
+                border_color = (255, 255, 0)  # Cyan for friendLearning
 
             img = cv2.copyMakeBorder(img, 10, 0, 0, 0, cv2.BORDER_CONSTANT, value=border_color)
 
