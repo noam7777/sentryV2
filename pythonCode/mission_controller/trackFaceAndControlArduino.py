@@ -108,7 +108,9 @@ class LockAndShootController:
                         if isValidTargetDetected :
                             height, width = img.shape[:2]
                             isCameraCenterInBbox = self.isPointInBbox(0.5 * width, 0.5 * height, self.targetSelector.currentChosenTarget.bounding_box)
-                        self.sentryController.sentry_pid(avg_position_normalized, self.faceClassifier.isFaceDetected, isCameraCenterInBbox, self.shouldPerformPrecisedShoot)
+                        self.sentryController.sentry_pid(avg_position_normalized, self.faceClassifier.faceDetected, isCameraCenterInBbox, self.shouldPerformPrecisedShoot)
+                else:
+                    self.sentryController.reset()
 
 
 

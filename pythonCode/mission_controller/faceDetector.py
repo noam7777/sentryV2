@@ -1,6 +1,8 @@
 import cv2
 import face_recognition
 import time
+from face_encoding_manager import FaceEncodingManager
+
 
 class FaceDetection:
     def __init__(self, bounding_box=(0, 0, 0,0), face_id="Unknown", encoding=None):
@@ -31,9 +33,8 @@ class FaceClassifier:
         self.faceDetected = False
 
         # Known faces and their encodings
-        self.known_face_encodings = []
-        self.known_face_names = []
-
+        self.face_encoding_manager = FaceEncodingManager()
+        
         # Modes
         self.mode = "friendsAndFoesDetection"  # "friendLearning" or "friendsAndFoesDetection"
 
@@ -55,15 +56,14 @@ class FaceClassifier:
 
         if self.mode == "friendLearning":
             for location, encoding in zip(face_locations, face_encodings):
-                matches = face_recognition.compare_faces(self.known_face_encodings, encoding, tolerance=0.6)
+                matches = face_recognition.compare_faces(self.face_encoding_manager.known_face_encodings, encoding, tolerance=0.6)
                 
                 if not any(matches):
-                    self.known_face_encodings.append(encoding)
-                    face_id = "Friend_{}".format(len(self.known_face_names) + 1)
-                    self.known_face_names.append(face_id)
+                    face_id = "Friend_{}".format(len(self.face_encoding_manager.known_face_names) + 1)
+                    self.face_encoding_manager.add_face(encoding, face_id)
                 else:
                     match_index = matches.index(True)
-                    face_id = self.known_face_names[match_index]
+                    face_id = self.face_encoding_manager.known_face_names[match_index]
                 
                 top, right, bottom, left = location
                 bounding_box = (left * 4, top * 4, (right - left) * 4, (bottom - top) * 4)
@@ -72,11 +72,11 @@ class FaceClassifier:
 
         elif self.mode == "friendsAndFoesDetection":
             for location, encoding in zip(face_locations, face_encodings):
-                matches = face_recognition.compare_faces(self.known_face_encodings, encoding, tolerance=0.6)
+                matches = face_recognition.compare_faces(self.face_encoding_manager.known_face_encodings, encoding, tolerance=0.6)
                 face_id = "Unknown"
                 if True in matches:
                     match_index = matches.index(True)
-                    face_id = self.known_face_names[match_index]
+                    face_id = self.face_encoding_manager.known_face_names[match_index]
                 
                 top, right, bottom, left = location
                 bounding_box = (left * 4, top * 4, (right - left) * 4, (bottom - top) * 4)

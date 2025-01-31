@@ -42,6 +42,10 @@ class Controller:
         cmd_azimuth = int(errorX * self.kP_azimuth)
         cmd_elevation = int(errorY * self.kP_elevation)
         self.currentCommand = (cmd_elevation, cmd_azimuth, gunCommand)
-    
+        
+    def reset(self):
+        self.currentCommand = (0, 0, 2)
+
+
     def close(self):
         self.serial_conn.close()

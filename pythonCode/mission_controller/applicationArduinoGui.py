@@ -8,7 +8,6 @@ import cv2
 from datetime import datetime # for the record file name
 import os # for creating a recording folder
 
-
 class ArduinoReader:
     def __init__(self, port, baud_rate):
         self.port = port
@@ -54,7 +53,7 @@ class ArduinoGUI:
         self.arduino_reader = arduino_reader
 
         self.root.title("Arduino Data Display")
-        self.root.geometry("800x600")  # Adjusted for video display
+        self.root.geometry("900x1100")  # Adjusted for video display
 
         # Initialize velocity and shooting state
         self.manual_azimuth_velocity = 0
@@ -62,6 +61,10 @@ class ArduinoGUI:
         self.gun_command = 0
         self.should_send_commands_manually = True
         self.lastSentCommandTimeStamp = 0
+
+        # Recording state
+        self.is_recording = False
+        self.video_writer = None
 
         # Placeholder for the filename
         self.video_filename = None
@@ -73,69 +76,90 @@ class ArduinoGUI:
         # Start auto control thread
         self.lock_and_shoot_controller.start_auto_control_thread()
 
-        # Labels to display parsed data
-        self.gun_state_label = ttk.Label(root, text="Gun State: --", font=("Arial", 14))
-        self.gun_state_label.pack(pady=10)
+        # Video Frame
+        self.video_frame = ttk.Frame(root)
+        self.video_frame.grid(row=0, column=0, columnspan=3, pady=10)
 
-        self.darts_left_label = ttk.Label(root, text="Darts Left: --", font=("Arial", 14))
-        self.darts_left_label.pack(pady=10)
+        self.canvas = tk.Canvas(self.video_frame, width=640, height=480, bg="black")
+        self.canvas.pack()
 
-        self.azimuth_label = ttk.Label(root, text="Azimuth: --", font=("Arial", 14))
-        self.azimuth_label.pack(pady=10)
+        # Status Labels (Gun state, darts left, azimuth, elevation)
+        self.status_frame = ttk.Frame(root)
+        self.status_frame.grid(row=1, column=0, columnspan=3, pady=10)
 
-        self.elevation_label = ttk.Label(root, text="Elevation: --", font=("Arial", 14))
-        self.elevation_label.pack(pady=10)
+        self.gun_state_label = ttk.Label(self.status_frame, text="Gun State: --", font=("Arial", 14))
+        self.gun_state_label.grid(row=0, column=0, padx=10)
 
-        self.mode_label = ttk.Label(root, text="mode: AUTO", font=("Arial", 14))
-        self.mode_label.pack(pady=10)
+        self.darts_left_label = ttk.Label(self.status_frame, text="Darts Left: --", font=("Arial", 14))
+        self.darts_left_label.grid(row=0, column=1, padx=10)
 
-        # Buttons for commands
-        self.shutdown_button = ttk.Button(root, text="SHUTDOWN", command=lambda: self.set_gun_command(0))
-        self.shutdown_button.pack(pady=5)
+        self.azimuth_label = ttk.Label(self.status_frame, text="Azimuth: --", font=("Arial", 14))
+        self.azimuth_label.grid(row=1, column=0, padx=10)
 
-        self.disarm_button = ttk.Button(root, text="DISARM", command=lambda: self.set_gun_command(1))
-        self.disarm_button.pack(pady=5)
+        self.elevation_label = ttk.Label(self.status_frame, text="Elevation: --", font=("Arial", 14))
+        self.elevation_label.grid(row=1, column=1, padx=10)
 
-        self.arm_button = ttk.Button(root, text="ARM", command=lambda: self.set_gun_command(2))
-        self.arm_button.pack(pady=5)
+        self.mode_label = ttk.Label(self.status_frame, text="Mode: AUTO", font=("Arial", 14))
+        self.mode_label.grid(row=2, column=0, columnspan=2, pady=10)
 
-        self.fire_button = ttk.Button(root, text="FIRE", command=lambda: self.set_gun_command(3))
-        self.fire_button.pack(pady=5)
+        # Control Buttons (Shutdown, Disarm, Arm, Fire, Reload)
+        self.control_frame = ttk.Frame(root)
+        self.control_frame.grid(row=2, column=0, columnspan=3, pady=10)
 
-        self.fire_button = ttk.Button(root, text="RELOAD", command=lambda: self.set_gun_command(4))
-        self.fire_button.pack(pady=5)
+        self.shutdown_button = ttk.Button(self.control_frame, text="SHUTDOWN", command=lambda: self.set_gun_command(0))
+        self.shutdown_button.grid(row=0, column=0, padx=5)
 
-        self.lock_and_shoot_button = ttk.Button(root, text="AUTO_MODE", command=lambda: self.setAutoMode(True))
-        self.lock_and_shoot_button.pack(pady=5)
+        self.disarm_button = ttk.Button(self.control_frame, text="DISARM", command=lambda: self.set_gun_command(1))
+        self.disarm_button.grid(row=0, column=1, padx=5)
 
-        # Create a toggle button
-        self.precised_shot_toggle_button = tk.Button(root, text="OFF", bg="red", command=self.toggle_precised_shot_button, width=10, height=2)
-        self.precised_shot_toggle_button.pack(pady=20)
+        self.arm_button = ttk.Button(self.control_frame, text="ARM", command=lambda: self.set_gun_command(2))
+        self.arm_button.grid(row=0, column=2, padx=5)
+
+        self.fire_button = ttk.Button(self.control_frame, text="FIRE", command=lambda: self.set_gun_command(3))
+        self.fire_button.grid(row=1, column=0, padx=5)
+        
+        self.reload_button = ttk.Button(self.control_frame, text="RELOAD", command=lambda: self.set_gun_command(4))
+        self.reload_button.grid(row=1, column=1, padx=5)
+
+        # Mode Selection Buttons
+        self.mode_frame = ttk.Frame(root)
+        self.mode_frame.grid(row=3, column=0, columnspan=3, pady=10)
+
+        self.lock_and_shoot_button = ttk.Button(self.mode_frame, text="AUTO_MODE", command=lambda: self.setAutoMode(True))
+        self.lock_and_shoot_button.grid(row=0, column=0, padx=5)
+
+        self.manual_button = ttk.Button(self.mode_frame, text="MANUAL_MODE", command=lambda: self.setAutoMode(False))
+        self.manual_button.grid(row=0, column=1, padx=5)
+
+
+        # Toggle Buttons
+        self.toggle_frame = ttk.Frame(root)
+        self.toggle_frame.grid(row=4, column=0, columnspan=3, pady=10)
+
+        self.precised_shot_toggle_button = tk.Button(
+            self.toggle_frame, text="OFF", bg="red", command=self.toggle_precised_shot_button, width=10, height=2
+        )
+        self.precised_shot_toggle_button.grid(row=0, column=0, padx=5)
         self.precised_shot_toggle_button.is_on = False  # Start with OFF
 
-        # Create a toggle button
-        self.friend_learning_toggle_button = tk.Button(root, text="Foes Detect", bg="red", command=self.toggle_friend_learning_state, width=10, height=2)
-        self.friend_learning_toggle_button.pack(pady=20)
+        self.friend_learning_toggle_button = tk.Button(
+            self.toggle_frame, text="Foes Detect", bg="red", command=self.toggle_friend_learning_state, width=10, height=2
+        )
+        self.friend_learning_toggle_button.grid(row=0, column=1, padx=5)
         self.friend_learning_toggle_button.is_on = False  # Start with OFF
 
-        # VIDEO HANDLING
-        self.manual_button = ttk.Button(root, text="MANUAL_MODE", command=lambda: self.setAutoMode(False))
-        self.manual_button.pack(pady=5)
+        self.save_encoding_button = ttk.Button(self.toggle_frame, text="Save Encodings", command=lambda: self.lock_and_shoot_controller.faceClassifier.face_encoding_manager.save_data())
+        self.save_encoding_button.grid(row=0, column=2, padx=5)
 
-        # Recording state
-        self.is_recording = False
-        self.video_writer = None
+        # Video Control Buttons
+        self.video_control_frame = ttk.Frame(root)
+        self.video_control_frame.grid(row=5, column=0, columnspan=3, pady=10)
 
-        # Video display Canvas
-        self.canvas = tk.Canvas(root, width=640, height=480, bg="black")
-        self.canvas.pack(pady=10)
+        self.record_button = ttk.Button(self.video_control_frame, text="Record", command=self.start_recording)
+        self.record_button.grid(row=0, column=0, padx=5)
 
-        # Buttons for recording
-        self.record_button = ttk.Button(root, text="Record", command=self.start_recording)
-        self.record_button.pack(pady=5)
-
-        self.stop_button = ttk.Button(root, text="Stop Recording", command=self.stop_recording)
-        self.stop_button.pack(pady=5)
+        self.stop_button = ttk.Button(self.video_control_frame, text="Stop Recording", command=self.stop_recording)
+        self.stop_button.grid(row=0, column=1, padx=5)
 
 
         # Bind keys for azimuth and elevation control
@@ -224,7 +248,6 @@ class ArduinoGUI:
             self.friend_learning_toggle_button.config(text="FoesDetection", bg="red")
         else:
             self.friend_learning_toggle_button.is_on = True
-            self.lock_and_shoot_controller.shouldPerformPrecisedShoot = True
             self.lock_and_shoot_controller.faceClassifier.mode = "friendLearning"
             self.friend_learning_toggle_button.config(text="friendLearning", bg="blue")
 
